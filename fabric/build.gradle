@@ -63,6 +63,57 @@ remapJar {
     classifier null
 }
 
+def verifyMixinRefmap = tasks.register("verifyMixinRefmap") {
+    group = "verification"
+    description = "Verify that the runtime common mixins load their generated intermediary refmap."
+    dependsOn tasks.named("remapJar")
+    inputs.file(tasks.named("remapJar").flatMap { it.archiveFile })
+
+    doLast {
+        def jarFile = tasks.named("remapJar").get().archiveFile.get().asFile
+        new java.util.zip.ZipFile(jarFile).withCloseable { jar ->
+            def readJson = { String path ->
+                def entry = jar.getEntry(path)
+                if (entry == null) {
+                    throw new GradleException("Missing ${path} in ${jarFile.name}")
+                }
+                jar.getInputStream(entry).withCloseable { stream ->
+                    new groovy.json.JsonSlurper().parse(stream, "UTF-8")
+                }
+            }
+            String commonMixin = "memoryleakfix${build16 ? '-16' : ''}.mixins.json"
+            def registeredMixins = readJson("fabric.mod.json").mixins.collect {
+                it instanceof String ? it : it.config
+            }
+            if (!registeredMixins.contains(commonMixin)) {
+                throw new GradleException("${commonMixin} is not registered in fabric.mod.json")
+            }
+            def config = readJson(commonMixin)
+            if (!(config.refmap instanceof String) || config.refmap.isEmpty()) {
+                throw new GradleException("${commonMixin} does not declare its common refmap")
+            }
+            def refmap = readJson(config.refmap)
+            def mappings = refmap.mappings
+            def intermediaryMappings = refmap.data?.get("named:intermediary")
+            if (!(mappings instanceof Map) || mappings.isEmpty() || intermediaryMappings != mappings) {
+                throw new GradleException("${config.refmap} has no consistent intermediary mappings")
+            }
+            if (!build16) {
+                def screenshot = mappings["ca/fxco/memoryleakfix/mixin/hugeScreenshotLeak/Minecraft_screenshotMixin"]
+                if (screenshot?.get("grabHugeScreenshot") != "Lnet/minecraft/class_310;method_35699(Ljava/io/File;IIII)Lnet/minecraft/class_2561;" ||
+                        screenshot?.get("Lcom/mojang/blaze3d/platform/GlUtil;allocateMemory(I)Ljava/nio/ByteBuffer;") != "Lnet/minecraft/class_4494;method_35611(I)Ljava/nio/ByteBuffer;") {
+                    throw new GradleException("${config.refmap} is missing the hugeScreenshotLeak intermediary targets")
+                }
+            }
+            logger.lifecycle("Verified ${commonMixin} -> ${config.refmap} in ${jarFile.name}")
+        }
+    }
+}
+
+tasks.named("check") {
+    dependsOn verifyMixinRefmap
+}
+
 jar {
     classifier "dev"
 }

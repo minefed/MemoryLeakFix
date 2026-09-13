@@ -3,6 +3,7 @@
   "minVersion": "0.8",
   "package": "ca.fxco.memoryleakfix.mixin",
   "compatibilityLevel": "JAVA_8",
+  "refmap": "memoryleakfix-common-refmap.json",
   "client": [
     "readResourcesLeak.TextureUtil_freeBufferMixin",
     "targetEntityLeak.Minecraft_targetClearMixin"

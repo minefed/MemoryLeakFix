@@ -4,6 +4,9 @@ architectury {
 
 loom {
     // accessWidenerPath = file("src/main/resources/examplemod.accesswidener")
+    mixin {
+        defaultRefmapName = "memoryleakfix-common-refmap.json"
+    }
 }
 
 sourceCompatibility = JavaVersion.VERSION_1_8
